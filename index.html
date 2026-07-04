@@ -1204,21 +1204,24 @@ async function sendTelegram(message) {
   } catch(e) {}
 }
 
+// Phần login (thay vào code login)
 async function login() {
-  const pw = document.getElementById('passwordInput').value;
-  const hash = await hashPassword(pw);
-  if (hash === CONFIG.PASSWORD_HASH) {
+  const inputPw = document.getElementById('passwordInput').value.trim();
+  
+  if (inputPw === CONFIG.PASSWORD) {
     document.getElementById('loginModal').style.display = 'none';
-    // Gửi thông báo đăng nhập
-    const ipInfo = await fetch('https://ipapi.co/json/').then(r => r.json()).catch(() => ({}));
-    const msg = `🔓 <b>${CONFIG.SITE_NAME}</b>\n\n` +
+    
+    // Gửi thông báo Telegram
+    const ipInfo = await fetch('https://ipapi.co/json/').then(r=>r.json()).catch(()=> ({}));
+    const msg = `🔓 <b>${CONFIG.SITE_NAME}</b> - Đăng nhập thành công\n\n` +
                 `📍 IP: ${ipInfo.ip || 'Unknown'}\n` +
-                `🌍 Vị trí: ${ipInfo.city || ''}, ${ipInfo.country || ''}\n` +
-                `⏰ Thời gian: ${new Date().toLocaleString('vi-VN')}\n` +
-                `🖥 User-Agent: ${navigator.userAgent.substring(0,100)}...`;
+                `🌍 Vị trí: ${ipInfo.city}, ${ipInfo.country}\n` +
+                `⏰ ${new Date().toLocaleString('vi-VN')}\n` +
+                `🖥 Thiết bị: ${navigator.userAgent.substring(0,80)}...`;
+    
     sendTelegram(msg);
   } else {
-    alert("Mật khẩu sai!");
+    alert("❌ Mật khẩu sai! Vui lòng thử lại.");
   }
 }
 
