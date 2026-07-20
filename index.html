@@ -1209,7 +1209,55 @@ a {
   </div>
 </div>
 <script src="config.js"></script>
+<script src="config.js"></script>
 <script>
+// ==================== BIẾN TOÀN CỤC & HELPER ====================
+let currentIP = null;
+
+async function getLocationInfo() {
+  try {
+    let data = await fetch('https://ipapi.co/json/').then(r => r.json());
+    if (data.ip) {
+      currentIP = data.ip;
+      return data;
+    }
+  } catch(e) {}
+  
+  try {
+    let data = await fetch('https://ipinfo.io/json').then(r => r.json());
+    currentIP = data.ip;
+    return { ip: data.ip, city: data.city, country: data.country };
+  } catch(e) {}
+  
+  currentIP = 'Unknown-' + Date.now();
+  return { ip: currentIP, city: '', country: '' };
+}
+
+// Lấy / Lưu attempts theo IP
+function getAttempts(ip) {
+  const key = `attempts_${ip}`;
+  const data = localStorage.getItem(key);
+  return data ? JSON.parse(data) : { count: 0, password: CONFIG.PASSWORD, lastReset: Date.now() };
+}
+
+function saveAttempts(ip, count, newPassword = null) {
+  const key = `attempts_${ip}`;
+  const data = {
+    count: count,
+    password: newPassword || CONFIG.PASSWORD,
+    lastReset: Date.now()
+  };
+  localStorage.setItem(key, JSON.stringify(data));
+  return data;
+}
+
+// Tạo mật khẩu mới
+function generateNewPassword() {
+  const random4 = Math.floor(1000 + Math.random() * 9000);
+  const timestamp = new Date().toISOString().slice(0,19).replace(/[:T]/g, '');
+  return `june\( {random4}@ \){timestamp}`;
+}
+
 // Gửi Telegram
 async function sendTelegram(message) {
   if (!CONFIG.TELEGRAM_BOT_TOKEN) {
@@ -1226,55 +1274,69 @@ async function sendTelegram(message) {
         parse_mode: 'HTML'
       })
     });
-  } catch(e) { console.log("Telegram error", e); }
+  } catch(e) { console.error("Telegram error", e); }
 }
 
-// Lấy IP + Vị trí
-async function getLocationInfo() {
-  try {
-    // Thử ipapi.co trước
-    let data = await fetch('https://ipapi.co/json/').then(r => r.json());
-    if (data.ip) return data;
-  } catch(e) {}
-  
-  try {
-    // Fallback ipinfo.io
-    let data = await fetch('https://ipinfo.io/json').then(r => r.json());
-    return {
-      ip: data.ip,
-      city: data.city,
-      country: data.country
-    };
-  } catch(e) {}
-  
-  return { ip: 'Unknown', city: '', country: '' };
-}
-
-// Login
+// ==================== LOGIN LOGIC MỚI ====================
 async function handleLogin() {
-  const pw = document.getElementById('passwordInput').value.trim();
+  const pwInput = document.getElementById('passwordInput');
+  const pw = pwInput.value.trim();
   
-  if (pw === CONFIG.PASSWORD) {
+  if (!currentIP) {
+    await getLocationInfo();
+  }
+
+  const attemptData = getAttempts(currentIP);
+  const currentCorrectPw = attemptData.password;
+
+  if (pw === currentCorrectPw) {
+    // Thành công
     document.getElementById('loginModal').style.display = 'none';
     
     const loc = await getLocationInfo();
-    
-    const msg = `🔓 <b>${CONFIG.SITE_NAME}</b> - Đăng nhập thành công\n\n` +
+    const msg = `✅ <b>${CONFIG.SITE_NAME}</b> - Đăng nhập thành công\n\n` +
                 `📍 IP: ${loc.ip}\n` +
-                `🌍 Vị trí: ${loc.city || ''} ${loc.country || ''}\n` +
+                `🌍 ${loc.city || ''} ${loc.country || ''}\n` +
                 `⏰ ${new Date().toLocaleString('vi-VN')}\n` +
-                `🖥 ${navigator.userAgent.substring(0, 60)}...`;
+                `🔑 Mật khẩu: ${currentCorrectPw}`;
     
     sendTelegram(msg);
-    alert("✅ Đăng nhập thành công!");
+    alert("✅ Đăng nhập thành công! Chào mừng bạn.");
+    
+    // Reset attempts khi login thành công
+    saveAttempts(currentIP, 0);
+    
   } else {
-    alert("❌ Mật khẩu sai!");
+    // Sai mật khẩu
+    let newCount = attemptData.count + 1;
+    
+    if (newCount >= CONFIG.MAX_ATTEMPTS) {
+      // Đổi mật khẩu mới
+      const newPw = generateNewPassword();
+      saveAttempts(currentIP, CONFIG.MAX_ATTEMPTS, newPw);
+      
+      const loc = await getLocationInfo();
+      const alertMsg = `🚨 IP ${loc.ip} đã nhập sai 3 lần!\nMật khẩu mới: ${newPw}`;
+      
+      await sendTelegram(alertMsg);
+      
+      alert(`❌ Đã nhập sai mật khẩu 3 lần.\n\nMật khẩu đã được đổi tự động.\nVui lòng liên hệ Admin để lấy mật khẩu mới.`);
+      pwInput.value = '';
+    } else {
+      saveAttempts(currentIP, newCount);
+      alert(`❌ Mật khẩu sai! Còn ${CONFIG.MAX_ATTEMPTS - newCount} lần thử.`);
+    }
   }
 }
 
-window.onload = () => {
+// Khởi tạo
+window.onload = async () => {
+  await getLocationInfo();
   document.getElementById('loginModal').style.display = 'flex';
+  
+  // Hiển thị thông tin attempts (debug)
+  console.log(`%cJUNE Security Active - IP: ${currentIP}`, 'color: teal; font-weight: bold');
 };
-</script>
+    </script>
 </body>
 </html>
